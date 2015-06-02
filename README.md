@@ -10,9 +10,10 @@ There are 4 main directories:
 
 # Toolchain
 
-You will need the gcc-arm-none-eabi toolchain for compile & link and the RFDLoader to program the RFduino.
+You will need the gcc-arm-none-eabi toolchain for compiling & linking and the RFDLoader to program the RFduino.
 The RFduino repo contains a tarballed MAC OS X version of the gcc-arm-none-eabi toolchain which I have tested and confirmed to work.
-You can find other version here: https://launchpad.net/gcc-arm-embedded
+You can find other versions here: https://launchpad.net/gcc-arm-embedded
+
 The repo also contains the RFDLoader tool for every platform. You may have to chmod +x it to get it to execute.
 
 # Build
@@ -20,6 +21,7 @@ The repo also contains the RFDLoader tool for every platform. You may have to ch
 I have created a nice Makefile that makes this process simple:
 
 `make`
+
 `make upload`
 
 Done! Just make sure the toolchain and RFDLoader is in the path and are running it in a UNIX like environment.

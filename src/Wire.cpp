@@ -221,7 +221,7 @@ bool TwoWire::twi_master_init(void)
     twi->PSELSCL = SCL_pin_number;
     twi->PSELSDA = SDA_pin_number;
 
-    uint32_t freq TWI_FREQUENCY_FREQUENCY_K100;;
+    uint32_t freq = TWI_FREQUENCY_FREQUENCY_K100;
     if (speed == 250)
       freq = TWI_FREQUENCY_FREQUENCY_K250;
     else if (speed == 400)

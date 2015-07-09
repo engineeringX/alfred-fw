@@ -9,8 +9,11 @@
 #define TMP007_REG_DEVICE_ID (0x1F)
 
 #define MPU6050_DEV_ADDR (0x68)
+#define MPU6050_REG_SAMPLE_RATE_DIVIDER (0x19)
+#define MPU6050_REG_CONFIG (0x1A)
 #define MPU6050_REG_ACCEL_CONFIG (0x1C)
 #define MPU6050_REG_GYRO_CONFIG (0x1B)
+#define MPU6050_REG_FIFO_EN (0x23)
 #define MPU6050_REG_ACCEL_X_HI (0x3B) 
 #define MPU6050_REG_ACCEL_X_LO (0x3C)
 #define MPU6050_REG_ACCEL_Y_HI (0x3D)
@@ -24,9 +27,15 @@
 #define MPU6050_REG_GYRO_Z_HI (0x47)
 #define MPU6050_REG_GYRO_Z_LO (0x48)
 #define MPU6050_REG_PWRMGMT_01 (0x6B)
+#define MPU6050_REG_FIFO_COUNT_H (0x72)
+#define MPU6050_REG_FIFO_COUNT_L (0x73)
+#define MPU6050_REG_FIFO_RW (0x74)
 #define MPU6050_REG_WHO_AM_I (0x75)
 
-void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, int8_t* data) {
+#define MPU6050_ACCEL_FS_2_LSB (16384.0f)
+#define MPU6050_GYRO_FS_250_LSB (131.0f)
+
+void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
   Wire.beginTransmission(dev_addr);
   Wire.write(reg_addr);
   Wire.endTransmission();
@@ -39,49 +48,74 @@ void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, int8_t* data
   Wire.endTransmission();
 }
 
-int8_t read_byte(uint8_t dev_addr, uint8_t reg_addr) {
-  int8_t data;
+uint8_t read_byte(uint8_t dev_addr, uint8_t reg_addr) 
+{
+  uint8_t data;
   read_bytes(dev_addr, reg_addr, 1, &data);
   return data;
 }
 
-void write_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, int8_t* data) {
+void write_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) 
+{
   Wire.beginTransmission(dev_addr);
   Wire.write(reg_addr);
-  for(uint8_t i = 0; i < length; i++) {
+  for(uint8_t i = 0; i < length; i++) 
+  {
     Wire.write(data[i]);
   }
   Wire.endTransmission();
 }
 
-void write_byte(uint8_t dev_addr, uint8_t reg_addr, int8_t data) {
+void write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data) 
+{
   write_bytes(dev_addr, reg_addr, 1, &data);
 }
 
-float tmp007_read_obj_temp() {
+float tmp007_read_obj_temp() 
+{
   int16_t regVal = read_byte(TMP007_DEV_ADDR, TMP007_REG_OBJTEMP);
   regVal = (regVal << 8) | read_byte(TMP007_DEV_ADDR, TMP007_REG_OBJTEMP);
 
   return (regVal >> 2) * 0.03125;
 }
 
-void mpu6050_set_sleep_enable(bool sleep)
+void mpu6050_set_sleep_enable(bool sleep) 
 {
   uint8_t data = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01);
   data = ((uint8_t)sleep << 6) | (data & ~(1 << 6));
   write_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01, data);
 }
 
-void mpu6050_init_config()
+void mpu6050_set_sample_rate(uint8_t sample_rate)
 {
-  uint8_t pwrmgmt = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01, (pwrmgmt & ~(0x7)) | 0x01);
+  uint8_t gyroscope_fs = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG) & 0x7;
+  gyroscope_fs = (gyroscope_fs == 0 || gyroscope_fs == 7) ? 8000 : 1000;
+  uint8_t samplerate_div = (gyroscope_fs / sample_rate) - 1;
+  Serial.print("sample rate divider: "); Serial.println(samplerate_div);
+  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_SAMPLE_RATE_DIVIDER, samplerate_div);
+}
 
+void mpu6050_init()
+{
+  // Disable the temperature sensor (bit 3) and use the gyroscope's x clk as the clk source (bit[2:0])
+  uint8_t pwrmgmt = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01);
+  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01, (pwrmgmt & ~(0xf)) | 0x09);
+
+  // Set the accelerometer's full scale range to +-2g, the most sensitive setting
   uint8_t config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_CONFIG);
   write_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_CONFIG, config & ~(0x3 << 3));
 
+  // Set the gyroscope's full scale range to +-250 deg/s, the most sensitive setting
   config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_CONFIG);
   write_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_CONFIG, config & ~(0x3 << 3));
+
+  // Set the DLPF setting to cutoff at 10 Hz
+  config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG);
+  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG, (config & ~(0x7)) | 0x5);
+
+  // Enable writing into the FIFO for accel and gyro
+  config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_EN);
+  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_EN, (config | (0xf << 3)));
 }
 
 Triple<int16_t, int16_t, int16_t> mpu6050_read_accel()
@@ -112,6 +146,23 @@ Triple<int16_t, int16_t, int16_t> mpu6050_read_gyro()
   return Triple<int16_t, int16_t, int16_t>(x_gyro, y_gyro, z_gyro);
 }
 
+uint8_t mpu6050_read_fifo(uint8_t num, int16_t* data)
+{
+  uint16_t count = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_COUNT_H);
+  count = (count << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_COUNT_L);
+
+  if(count > 0)
+  {
+    for(uint8_t i = 1; i < num; i++)
+    {
+      int8_t byte = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_RW);
+      data[i] = ((int16_t)byte << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_RW);
+    }
+  }
+
+  return count;
+}
+
 int main() {
   init();
 
@@ -129,12 +180,14 @@ void setup() {
   Serial.begin(9600);
   Wire.begin();
 
-  mpu6050_init_config();
+  mpu6050_init();
+  // Set the sample rate to 100 hz and disable sleep mode
+  mpu6050_set_sample_rate(250);
   mpu6050_set_sleep_enable(false);
 }
 
 void loop() {
-  delay(100);
+  delay(500);
  
   //float temp = tmp007_read_obj_temp();
 
@@ -142,23 +195,25 @@ void loop() {
   //Serial.print(temp, DEC);
   //Serial.print("C");
   //Serial.print("\n\r");
-  
+ 
   Triple<int16_t, int16_t, int16_t> accel = mpu6050_read_accel();
-  Serial.print("{");
-  Serial.print(accel.first(), DEC);
-  Serial.print(", ");
-  Serial.print(accel.second(), DEC);
-  Serial.print(", ");
-  Serial.print(accel.third(), DEC);
-  Serial.print("}, ");
-
   Triple<int16_t, int16_t, int16_t> gyro = mpu6050_read_gyro();
+
   Serial.print("{");
-  Serial.print(gyro.first(), DEC);
+  Serial.print((float)accel.first()/MPU6050_ACCEL_FS_2_LSB, DEC);
   Serial.print(", ");
-  Serial.print(gyro.second(), DEC);
+  Serial.print((float)accel.second()/MPU6050_ACCEL_FS_2_LSB, DEC);
   Serial.print(", ");
-  Serial.print(gyro.third(), DEC);
+  Serial.print((float)accel.third()/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print("}");
+
+  Serial.print("\t|\t");
+  Serial.print("{");
+  Serial.print((float)gyro.first()/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(", ");
+  Serial.print((float)gyro.second()/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(", ");
+  Serial.print((float)gyro.third()/MPU6050_GYRO_FS_250_LSB, DEC);
   Serial.println("}");
 
 }

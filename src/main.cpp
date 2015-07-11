@@ -1,39 +1,15 @@
 #include "Arduino.h"
-#include "Wire.h"
 #include "RFduinoBLE.h"
-
-#include "tuple.hpp"
+#include "MPU6050.h"
 
 #define TMP007_DEV_ADDR (0x40)
 #define TMP007_REG_OBJTEMP (0x03)
 #define TMP007_REG_DEVICE_ID (0x1F)
 
-#define MPU6050_DEV_ADDR (0x68)
-#define MPU6050_REG_SAMPLE_RATE_DIVIDER (0x19)
-#define MPU6050_REG_CONFIG (0x1A)
-#define MPU6050_REG_ACCEL_CONFIG (0x1C)
-#define MPU6050_REG_GYRO_CONFIG (0x1B)
-#define MPU6050_REG_FIFO_EN (0x23)
-#define MPU6050_REG_ACCEL_X_HI (0x3B) 
-#define MPU6050_REG_ACCEL_X_LO (0x3C)
-#define MPU6050_REG_ACCEL_Y_HI (0x3D)
-#define MPU6050_REG_ACCEL_Y_LO (0x3E)
-#define MPU6050_REG_ACCEL_Z_HI (0x3F)
-#define MPU6050_REG_ACCEL_Z_LO (0x40)
-#define MPU6050_REG_GYRO_X_HI (0x43) 
-#define MPU6050_REG_GYRO_X_LO (0x44)
-#define MPU6050_REG_GYRO_Y_HI (0x45)
-#define MPU6050_REG_GYRO_Y_LO (0x46)
-#define MPU6050_REG_GYRO_Z_HI (0x47)
-#define MPU6050_REG_GYRO_Z_LO (0x48)
-#define MPU6050_REG_PWRMGMT_01 (0x6B)
-#define MPU6050_REG_FIFO_COUNT_H (0x72)
-#define MPU6050_REG_FIFO_COUNT_L (0x73)
-#define MPU6050_REG_FIFO_RW (0x74)
-#define MPU6050_REG_WHO_AM_I (0x75)
-
 #define MPU6050_ACCEL_FS_2_LSB (16384.0f)
 #define MPU6050_GYRO_FS_250_LSB (131.0f)
+
+MPU6050 mpu;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
   Wire.beginTransmission(dev_addr);
@@ -79,90 +55,6 @@ float tmp007_read_obj_temp()
   return (regVal >> 2) * 0.03125;
 }
 
-void mpu6050_set_sleep_enable(bool sleep) 
-{
-  uint8_t data = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01);
-  data = ((uint8_t)sleep << 6) | (data & ~(1 << 6));
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01, data);
-}
-
-void mpu6050_set_sample_rate(uint8_t sample_rate)
-{
-  uint8_t gyroscope_fs = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG) & 0x7;
-  gyroscope_fs = (gyroscope_fs == 0 || gyroscope_fs == 7) ? 8000 : 1000;
-  uint8_t samplerate_div = (gyroscope_fs / sample_rate) - 1;
-  Serial.print("sample rate divider: "); Serial.println(samplerate_div);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_SAMPLE_RATE_DIVIDER, samplerate_div);
-}
-
-void mpu6050_init()
-{
-  // Disable the temperature sensor (bit 3) and use the gyroscope's x clk as the clk source (bit[2:0])
-  uint8_t pwrmgmt = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_PWRMGMT_01, (pwrmgmt & ~(0xf)) | 0x09);
-
-  // Set the accelerometer's full scale range to +-2g, the most sensitive setting
-  uint8_t config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_CONFIG);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_CONFIG, config & ~(0x3 << 3));
-
-  // Set the gyroscope's full scale range to +-250 deg/s, the most sensitive setting
-  config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_CONFIG);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_CONFIG, config & ~(0x3 << 3));
-
-  // Set the DLPF setting to cutoff at 10 Hz
-  config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_CONFIG, (config & ~(0x7)) | 0x5);
-
-  // Enable writing into the FIFO for accel and gyro
-  config = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_EN);
-  write_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_EN, (config | (0xf << 3)));
-}
-
-Triple<int16_t, int16_t, int16_t> mpu6050_read_accel()
-{
-  int16_t x_accel = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_X_HI);
-  x_accel = (x_accel << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_X_LO);
-
-  int16_t y_accel = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_Y_HI);
-  y_accel = (y_accel << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_Y_LO);
-
-  int16_t z_accel = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_Z_HI);
-  z_accel = (z_accel << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_ACCEL_Z_LO);
-
-  return Triple<int16_t, int16_t, int16_t>(x_accel, y_accel, z_accel);
-}
-
-Triple<int16_t, int16_t, int16_t> mpu6050_read_gyro()
-{
-  int16_t x_gyro = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_X_HI);
-  x_gyro = (x_gyro << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_X_LO);
-
-  int16_t y_gyro = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_Y_HI);
-  y_gyro = (y_gyro << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_Y_LO);
-
-  int16_t z_gyro = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_Z_HI);
-  z_gyro = (z_gyro << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_GYRO_Z_LO);
-
-  return Triple<int16_t, int16_t, int16_t>(x_gyro, y_gyro, z_gyro);
-}
-
-uint8_t mpu6050_read_fifo(uint8_t num, int16_t* data)
-{
-  uint16_t count = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_COUNT_H);
-  count = (count << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_COUNT_L);
-
-  if(count > 0)
-  {
-    for(uint8_t i = 1; i < num; i++)
-    {
-      int8_t byte = read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_RW);
-      data[i] = ((int16_t)byte << 8) | read_byte(MPU6050_DEV_ADDR, MPU6050_REG_FIFO_RW);
-    }
-  }
-
-  return count;
-}
-
 int main() {
   init();
 
@@ -180,41 +72,65 @@ void setup() {
   Serial.begin(9600);
   Wire.begin();
 
-  mpu6050_init();
-  // Set the sample rate to 100 hz and disable sleep mode
-  mpu6050_set_sample_rate(250);
-  mpu6050_set_sleep_enable(false);
+
+  mpu.initialize();
+  mpu.setTempSensorEnabled(false);
+  mpu.setDLPFMode(MPU6050_DLPF_BW_42);
+ 
+  float sample_rate = 1; // 1 Hz
+  uint8_t dlpf_cfg = mpu.getDLPFMode();
+  uint8_t smplrt_div = -1 + ((dlpf_cfg == 0 || dlpf_cfg == 7) ? 8000.0 : 1000.0) / sample_rate;
+  mpu.setRate(smplrt_div);
+
+  mpu.setIntDataReadyEnabled(true);
+
+  //mpu.setXGyroFIFOEnabled(true);
+  //mpu.setYGyroFIFOEnabled(true);
+  //mpu.setZGyroFIFOEnabled(true);
+  //mpu.setAccelFIFOEnabled(true);
+  //mpu.setFIFOEnabled(true);
 }
 
 void loop() {
-  delay(500);
- 
   //float temp = tmp007_read_obj_temp();
 
   //Serial.print("Temperature: ");
   //Serial.print(temp, DEC);
   //Serial.print("C");
   //Serial.print("\n\r");
- 
-  Triple<int16_t, int16_t, int16_t> accel = mpu6050_read_accel();
-  Triple<int16_t, int16_t, int16_t> gyro = mpu6050_read_gyro();
+
+  int16_t ax, ay, az, gx, gy, gz;
+
+  if(!mpu.getIntDataReadyStatus()) return;
+
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  
+  //uint8_t data[12];
+  //mpu.getFIFOBytes(data, 12);
+
+  //ax = ((int16_t)data[0] << 8) | data[1];
+  //ay = ((int16_t)data[2] << 8) | data[3];
+  //az = ((int16_t)data[4] << 8) | data[5];
+  //
+  //gx = ((int16_t)data[6] << 8) | data[7];
+  //gy = ((int16_t)data[8] << 8) | data[9];
+  //gz = ((int16_t)data[10] << 8) | data[11];
 
   Serial.print("{");
-  Serial.print((float)accel.first()/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(ax/MPU6050_ACCEL_FS_2_LSB, DEC);
   Serial.print(", ");
-  Serial.print((float)accel.second()/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(ay/MPU6050_ACCEL_FS_2_LSB, DEC);
   Serial.print(", ");
-  Serial.print((float)accel.third()/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(az/MPU6050_ACCEL_FS_2_LSB, DEC);
   Serial.print("}");
 
   Serial.print("\t|\t");
   Serial.print("{");
-  Serial.print((float)gyro.first()/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(gx/MPU6050_GYRO_FS_250_LSB, DEC);
   Serial.print(", ");
-  Serial.print((float)gyro.second()/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(gy/MPU6050_GYRO_FS_250_LSB, DEC);
   Serial.print(", ");
-  Serial.print((float)gyro.third()/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(gz/MPU6050_GYRO_FS_250_LSB, DEC);
   Serial.println("}");
-
 }
 

@@ -55,6 +55,13 @@ float tmp007_read_obj_temp()
   return (regVal >> 2) * 0.03125;
 }
 
+void mpu6050_set_sample_rate(uint16_t sample_rate)
+{
+  uint8_t dlpf_cfg = mpu.getDLPFMode();
+  uint8_t smplrt_div = -1 + ((dlpf_cfg == 0 || dlpf_cfg == 7) ? 8000.0 : 1000.0) / sample_rate;
+  mpu.setRate(smplrt_div);
+}
+
 int main() {
   init();
 
@@ -76,12 +83,8 @@ void setup() {
   mpu.initialize();
   mpu.setTempSensorEnabled(false);
   mpu.setDLPFMode(MPU6050_DLPF_BW_42);
- 
-  float sample_rate = 1; // 1 Hz
-  uint8_t dlpf_cfg = mpu.getDLPFMode();
-  uint8_t smplrt_div = -1 + ((dlpf_cfg == 0 || dlpf_cfg == 7) ? 8000.0 : 1000.0) / sample_rate;
-  mpu.setRate(smplrt_div);
-
+  mpu6050_set_sample_rate(1); // 1 Hz sample rate
+  
   mpu.setIntDataReadyEnabled(true);
 
   //mpu.setXGyroFIFOEnabled(true);

@@ -73,6 +73,42 @@ void mpu6050_set_sample_rate(uint16_t sample_rate)
   mpu.setRate(smplrt_div);
 }
 
+void advertise(uint8_t* data, uint32_t ms)
+{
+  // this is the data we want to appear in the advertisement
+  // (if the deviceName and advertisementData are too long to fix into the 31 byte
+  // ble advertisement packet, then the advertisementData is truncated first down to
+  // a single byte, then it will truncate the deviceName)
+  uint8_t buf[31];
+  buf[0] = 0x02;
+  buf[1] = 0x09;
+  buf[2] = 0x41;
+  buf[3] = 0x02;
+  buf[4] = 0x01;
+  buf[5] = 0x06;
+  buf[6] = 0x02;
+  buf[7] = 0x0a;
+  buf[8] = 0x04;
+  buf[9] = 0x03;
+  buf[10] = 0x03;
+  buf[11] = 0x20;
+  buf[12] = 0x22;
+  buf[13] = 0x0d;
+  buf[14] = 0xff;
+  memcpy(buf+15, data, 12);
+  RFduinoBLE_advdata = buf;
+  RFduinoBLE_advdata_len = 27;
+
+  // start the BLE stack
+  RFduinoBLE.begin();
+  
+  // advertise for ms milliseconds
+  RFduino_ULPDelay(ms);
+  
+  // stop the BLE stack
+  RFduinoBLE.end();
+}
+
 int main() {
   init();
 
@@ -101,7 +137,7 @@ int main() {
 
 void setup() {
   //RFduino_systemReset();
-  Serial.begin(115200);
+  Serial.begin(9600);
   Wire.begin();
 
   //count = 0;
@@ -125,6 +161,8 @@ void setup() {
 }
 
 void loop() {
+  RFduino_ULPDelay(1000);
+
   //float temp = tmp007_read_obj_temp();
 
   //Serial.print("Temperature: ");
@@ -136,6 +174,8 @@ void loop() {
 
   if(!mpu.getIntDataReadyStatus()) return;
   mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
+  
+  advertise((uint8_t*)buf, 5000);
 
   //*(buf+6) = tmp007_read_obj_temp();
   //Serial.println(buf[6]*TMP007_LSB, DEC);
@@ -155,17 +195,17 @@ void loop() {
   
   //if(count < 6) return;
 
-  Serial.print(buf[0]/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(buf[0], DEC);
   Serial.print(", ");
-  Serial.print(buf[1]/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(buf[1], DEC);
   Serial.print(", ");
-  Serial.print(buf[2]/MPU6050_ACCEL_FS_2_LSB, DEC);
+  Serial.print(buf[2], DEC);
   Serial.print(",");
-  Serial.print(buf[3]/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(buf[3], DEC);
   Serial.print(", ");
-  Serial.print(buf[4]/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(buf[4], DEC);
   Serial.print(", ");
-  Serial.print(buf[5]/MPU6050_GYRO_FS_250_LSB, DEC);
+  Serial.print(buf[5], DEC);
   Serial.println();
   
   //count -= 6;

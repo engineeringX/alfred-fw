@@ -13,7 +13,7 @@
 
 #define MPU6050_DATA_IRQ (2)
 
-#define HALFWORDS_PER_SAMPLE (6)
+#define HALFWORDS_PER_SAMPLE (8)
 #define BYTES_PER_SAMPLE (12)
 #define BUF_SIZE (1022)
 
@@ -73,31 +73,42 @@ void mpu6050_set_sample_rate(uint16_t sample_rate)
   mpu.setRate(smplrt_div);
 }
 
-void advertise(uint8_t* data, uint32_t ms)
+void ble_send(uint8_t* data, size_t size, uint32_t ms)
 {
   // this is the data we want to appear in the advertisement
   // (if the deviceName and advertisementData are too long to fix into the 31 byte
   // ble advertisement packet, then the advertisementData is truncated first down to
   // a single byte, then it will truncate the deviceName)
+  uint8_t bytes = 0;
   uint8_t buf[31];
-  buf[0] = 0x02;
-  buf[1] = 0x09;
-  buf[2] = 0x41;
-  buf[3] = 0x02;
-  buf[4] = 0x01;
-  buf[5] = 0x06;
-  buf[6] = 0x02;
-  buf[7] = 0x0a;
-  buf[8] = 0x04;
-  buf[9] = 0x03;
-  buf[10] = 0x03;
-  buf[11] = 0x20;
-  buf[12] = 0x22;
-  buf[13] = 0x0d;
-  buf[14] = 0xff;
-  memcpy(buf+15, data, 12);
+
+  // Device name: 'a'
+  buf[bytes++] = 0x02;
+  buf[bytes++] = 0x09;
+  buf[bytes++] = 0x41;
+
+  // flags: general discovery mode | br edr not supported 
+  buf[bytes++] = 0x02;
+  buf[bytes++] = 0x01;
+  buf[bytes++] = 0x06;
+
+  // TX power level: +4 dbm
+  buf[bytes++] = 0x02;
+  buf[bytes++] = 0x0a;
+  buf[bytes++] = 0x04;
+
+  // 16-bit service class UUID's
+  //buf[bytes++] = 0x03;
+  //buf[bytes++] = 0x03;
+  //buf[bytes++] = 0x20;
+  //buf[bytes++] = 0x22;
+  
+  // Sensor data
+  buf[bytes++] = size+1;
+  buf[bytes++] = 0xff;
+  memcpy(buf+bytes, data, size);
   RFduinoBLE_advdata = buf;
-  RFduinoBLE_advdata_len = 27;
+  RFduinoBLE_advdata_len = bytes+size;
 
   // start the BLE stack
   RFduinoBLE.begin();
@@ -161,8 +172,6 @@ void setup() {
 }
 
 void loop() {
-  RFduino_ULPDelay(1000);
-
   //float temp = tmp007_read_obj_temp();
 
   //Serial.print("Temperature: ");
@@ -174,26 +183,10 @@ void loop() {
 
   if(!mpu.getIntDataReadyStatus()) return;
   mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
+  *(buf+6) = tmp007_read_obj_temp();
+  *(buf+7) = analogRead(1);
   
-  advertise((uint8_t*)buf, 5000);
-
-  //*(buf+6) = tmp007_read_obj_temp();
-  //Serial.println(buf[6]*TMP007_LSB, DEC);
-
-  //Serial.write((uint8_t*)buf, BYTES_PER_SAMPLE); 
-  
-  //uint8_t data[12];
-  //mpu.getFIFOBytes(data, 12);
-
-  //ax = ((int16_t)data[0] << 8) | data[1];
-  //ay = ((int16_t)data[2] << 8) | data[3];
-  //az = ((int16_t)data[4] << 8) | data[5];
-  //
-  //gx = ((int16_t)data[6] << 8) | data[7];
-  //gy = ((int16_t)data[8] << 8) | data[9];
-  //gz = ((int16_t)data[10] << 8) | data[11];
-  
-  //if(count < 6) return;
+  ble_send((uint8_t*)buf, HALFWORDS_PER_SAMPLE << 1, 20);
 
   Serial.print(buf[0], DEC);
   Serial.print(", ");
@@ -206,8 +199,10 @@ void loop() {
   Serial.print(buf[4], DEC);
   Serial.print(", ");
   Serial.print(buf[5], DEC);
+  Serial.print(", ");
+  Serial.print(buf[6], DEC);
+  Serial.print(", ");
+  Serial.print(buf[7], DEC);
   Serial.println();
-  
-  //count -= 6;
 }
 

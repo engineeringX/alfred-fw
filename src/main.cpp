@@ -151,58 +151,49 @@ void setup() {
   Serial.begin(9600);
   Wire.begin();
 
-  //count = 0;
-
   mpu.initialize();
   mpu.setTempSensorEnabled(false);
   mpu.setDLPFMode(MPU6050_DLPF_BW_256);
-  mpu6050_set_sample_rate(100); // 1 Hz sample rate
-  
+  mpu6050_set_sample_rate(20); // 50 Hz sample rate
+
+  mpu.setXGyroFIFOEnabled(true);
+  mpu.setYGyroFIFOEnabled(true);
+  mpu.setZGyroFIFOEnabled(true);
+  mpu.setAccelFIFOEnabled(true);
+  mpu.setFIFOEnabled(true);
+
   mpu.setIntDataReadyEnabled(true);
 
   //pinMode(MPU6050_DATA_IRQ, INPUT);
   //RFduino_pinWakeCallback(MPU6050_DATA_IRQ, HIGH, mpu6050_data_ready);
   //mpu.getIntStatus();
-
-  //mpu.setXGyroFIFOEnabled(true);
-  //mpu.setYGyroFIFOEnabled(true);
-  //mpu.setZGyroFIFOEnabled(true);
-  //mpu.setAccelFIFOEnabled(true);
-  //mpu.setFIFOEnabled(true);
 }
 
 void loop() {
-  //float temp = tmp007_read_obj_temp();
-
-  //Serial.print("Temperature: ");
-  //Serial.print(temp, DEC);
-  //Serial.print("C");
-  //Serial.print("\n\r");
-
   int16_t buf[HALFWORDS_PER_SAMPLE+2];
 
   if(!mpu.getIntDataReadyStatus()) return;
   mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
   *(buf+6) = tmp007_read_obj_temp();
-  *(buf+7) = analogRead(1);
+  *(buf+7) = analogRead(2);
   
   ble_send((uint8_t*)buf, HALFWORDS_PER_SAMPLE << 1, 20);
 
-  Serial.print(buf[0], DEC);
-  Serial.print(", ");
-  Serial.print(buf[1], DEC);
-  Serial.print(", ");
-  Serial.print(buf[2], DEC);
-  Serial.print(",");
-  Serial.print(buf[3], DEC);
-  Serial.print(", ");
-  Serial.print(buf[4], DEC);
-  Serial.print(", ");
-  Serial.print(buf[5], DEC);
-  Serial.print(", ");
-  Serial.print(buf[6], DEC);
-  Serial.print(", ");
-  Serial.print(buf[7], DEC);
-  Serial.println();
+  //Serial.print(buf[0], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[1], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[2], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[3], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[4], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[5], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[6], DEC);
+  //Serial.print(",");
+  //Serial.print(buf[7], DEC);
+  //Serial.println();
 }
 

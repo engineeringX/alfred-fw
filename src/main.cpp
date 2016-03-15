@@ -32,6 +32,10 @@ uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
 std::deque<int16_t> linesFIFO;
 std::deque<int32_t> sumData;
+int16_t weights[] = {-7, -19, -26, -22, -1, 32, 65, 73, 40, -34, -117, -164, -20, 134,
+                     253, 263, 141, -72, -276, -365, -284, -61, 202, 376, 376, 202, -61,
+                     -284, -365, -276, -72, 141, 263, 253, 134, -20, -134, -164, -117, -34, 40,
+                     73, 65, 32, -1, -22, -26, -19, -7};
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);

@@ -20,10 +20,15 @@
 
 #define FILTER_LENGTH (50)
 #define SEC_FILTER_LENGTH (70)
-#define PULSE_LENGTH (120)
 #define FALL_THRESH_LOW (100)
 #define FALL_THRESH_HIGH (550)
 #define PUSH_NOTIF_LIMIT (20)
+
+#define PULSE_FILTER_LENGTH (120)
+#define PULSE_THRESH_LOW (1000)
+#define PULSE_THRESH_HIGH (1005)
+#define PULSE_MAX_BEAT (9)
+#define PULSE_TOTAL_INDEX (1200)
 
 MPU6050 mpu;
 
@@ -31,13 +36,14 @@ MPU6050 mpu;
 //size_t count;
 uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
-std::deque<int16_t> linesFIFO;
+std::deque<int16_t> motionFIFO;
 std::deque<int32_t> sumData;
 int16_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
 std::deque<int16_t> pulseFIFO;
+int16_t currentBPM[PULSE_FILTER_LENGTH];
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -138,7 +144,7 @@ void ble_send(uint8_t* data, size_t size, uint32_t ms)
 }
 
 void filterInit() {
-
+    memset(currentBPM, 0, PULSE_FILTER_LENGTH); 
 }
 
 int main() {
@@ -196,10 +202,10 @@ void motionFilter(int16_t* buf) {
     dataPoint += 1;
     int32_t outputSignal = 0;
 
-    // FIXME: We need at least 50 readings in linesFIFO 
-    if (linesFIFO.size() >= FILTER_LENGTH) {
+    // FIXME: We need at least 50 readings in motionFIFO 
+    if (motionFIFO.size() >= FILTER_LENGTH) {
         for(uint8_t sample=0; sample<FILTER_LENGTH; ++sample) {
-            outputSignal = outputSignal + weights[sample] * linesFIFO[sample];
+            outputSignal = outputSignal + weights[sample] * motionFIFO[sample];
         }
         Serial.print(dataPoint);
         Serial.print(":");
@@ -222,20 +228,55 @@ void motionFilter(int16_t* buf) {
             sumData.pop_front();
         }
 
-        linesFIFO.pop_front();
+        motionFIFO.pop_front();
         if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2) {
-            linesFIFO.push_back(buf[2]);
+            motionFIFO.push_back(buf[2]);
         }
     } else {    // We don't have enough readings yet, so fill up the buffer.
         // Check if we have enough data in the FIFO
         if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2)
-            linesFIFO.push_back(buf[2]);
+            motionFIFO.push_back(buf[2]);
     }
 }
 
 void pulseFilter(int16_t* buf) {
+    int16_t counter_ma = 0;
+    if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
+        int16_t beat = 0;
+        
+        // TODO: Dr. Wei, do we really need all of them int16_t?
+        uint16_t index_start = 0;
+        uint16_t index_end = 0;
+        uint16_t temp_counter = 0;
 
-
+        for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
+            if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
+                if (!index_start)
+                    index_start = sample;
+                else if (!index_end) {
+                    if (sample - index_start > PULSE_MAX_BEAT) {
+                        index_end = sample;
+                        // FIXME: fugly math, Dr. Wei please reduce it.
+                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
+                        beat = beat / (temp_counter + 1);
+                        temp_counter += 1;
+                        index_start = 0;
+                        index_end = 0;
+                    }
+                }
+            }
+            if (sample == 1)
+                currentBPM[sample] = beat;
+            else {
+                currentBPM[sample] = pulseFIFO(currentBPM[sample-1] * counter_ma + beat);
+                currentBPM[sample] = currentBPM / (counter_ma + 1);
+            }
+            counter_ma += 1;
+        }
+    } else {
+        if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2)
+            pulseFIFO.push_back(buf[7]);
+    }
 }
 
 void printSerial(int16_t* buf) {

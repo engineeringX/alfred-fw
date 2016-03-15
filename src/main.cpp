@@ -1,7 +1,7 @@
 #include "Arduino.h"
 #include "RFduinoBLE.h"
 #include "MPU6050.h"
-#include <queue>
+#include <deque>
 
 #define TMP007_DEV_ADDR (0x40)
 #define TMP007_REG_OBJTEMP (0x03)
@@ -30,8 +30,8 @@ MPU6050 mpu;
 //size_t count;
 uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
-std::queue<int16_t> linesFIFO[FILTER_LENGTH];
-std::queue<int16_t> sumData;
+std::deque<int16_t> linesFIFO;
+std::deque<int32_t> sumData;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -200,7 +200,7 @@ void motionFilter(int16_t* buf) {
         Serial.printf(outputSignal, DEC);
         Serial.println();
 
-        sumData.append(outputSignal);
+        sumData.push_back(outputSignal);
 
         if (sumData.size() >= SEC_FILTER_LENGTH) {
             int16_t total_sum_data = 0;
@@ -213,17 +213,17 @@ void motionFilter(int16_t* buf) {
                 Serial.print(total_sum_data, DEC);
                 packetCount++;
             }
-            sumData.pop();
+            sumData.pop_front();
         }
 
-        linesFIFO.pop();
+        linesFIFO.pop_front();
         if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2) {
-            linesFIFO.push(buf[2]);
+            linesFIFO.push_back(buf[2]);
         }
     } else {    // We don't have enough readings yet, so fill up the buffer.
         // Check if we have enough data in the FIFO
         if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2)
-            linesFIFO.push(buf[2]);
+            linesFIFO.push_back(buf[2]);
     }
 }
 

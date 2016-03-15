@@ -20,6 +20,7 @@
 
 #define FILTER_LENGTH (50)
 #define SEC_FILTER_LENGTH (70)
+#define PULSE_LENGTH (120)
 #define FALL_THRESH_LOW (100)
 #define FALL_THRESH_HIGH (550)
 #define PUSH_NOTIF_LIMIT (20)
@@ -32,10 +33,11 @@ uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
 std::deque<int16_t> linesFIFO;
 std::deque<int32_t> sumData;
-int16_t weights[] = {-7, -19, -26, -22, -1, 32, 65, 73, 40, -34, -117, -164, -20, 134,
-                     253, 263, 141, -72, -276, -365, -284, -61, 202, 376, 376, 202, -61,
-                     -284, -365, -276, -72, 141, 263, 253, 134, -20, -134, -164, -117, -34, 40,
-                     73, 65, 32, -1, -22, -26, -19, -7};
+int16_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
+                     254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
+                     -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
+                     74, 66, 32, 0, -22, -26, -18, -6};
+std::deque<int16_t> pulseFIFO;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -231,6 +233,11 @@ void motionFilter(int16_t* buf) {
     }
 }
 
+void pulseFilter(int16_t* buf) {
+
+
+}
+
 void printSerial(int16_t* buf) {
     Serial.print(buf[0], DEC);
     Serial.print(",");
@@ -261,6 +268,7 @@ void loop() {
 
     //printSerial(buf);
     motionFilter(buf);
+    pulseFilter(buf);
 
     if (!(packetCount % PUSH_NOTIF_LIMIT)) {
         // TODO: Decide on a format of what it means to have a buffer value for fall.

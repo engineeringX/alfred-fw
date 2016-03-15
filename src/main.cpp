@@ -199,9 +199,9 @@ void motionFilter(int16_t* buf) {
         for(uint8_t sample=0; sample<FILTER_LENGTH; ++sample) {
             outputSignal = outputSignal + weights[sample] * linesFIFO[sample];
         }
-        Serial.print(dataPoint, DEC);
+        Serial.print(dataPoint);
         Serial.print(":");
-        Serial.printf(outputSignal, DEC);
+        Serial.print(outputSignal);
         Serial.println();
 
         sumData.push_back(outputSignal);

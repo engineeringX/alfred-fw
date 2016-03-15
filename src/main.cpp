@@ -1,7 +1,7 @@
 #include "Arduino.h"
 #include "RFduinoBLE.h"
 #include "MPU6050.h"
-#include <deque>
+#include "qqueue.h"
 
 #define TMP007_DEV_ADDR (0x40)
 #define TMP007_REG_OBJTEMP (0x03)
@@ -36,13 +36,13 @@ MPU6050 mpu;
 //size_t count;
 uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
-std::deque<int16_t> motionFIFO;
-std::deque<int32_t> sumData;
+qqueue64<int16_t> motionFIFO;
+qqueue128<int32_t> sumData;
 int16_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
-std::deque<int16_t> pulseFIFO;
+qqueue128<int16_t> pulseFIFO;
 int16_t currentBPM[PULSE_FILTER_LENGTH];
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
@@ -150,7 +150,7 @@ void filterInit() {
 int main() {
     init();
 
-    filterInit();
+    //filterInit();
 
     setup();
     for(;;) {
@@ -212,7 +212,7 @@ void motionFilter(int16_t* buf) {
         Serial.print(outputSignal);
         Serial.println();
 
-        sumData.push_back(outputSignal);
+        sumData.push(outputSignal);
 
         if (sumData.size() >= SEC_FILTER_LENGTH) {
             int16_t total_sum_data = 0;
@@ -225,56 +225,56 @@ void motionFilter(int16_t* buf) {
                 Serial.print(total_sum_data, DEC);
                 packetCount++;
             }
-            sumData.pop_front();
+            sumData.pop();
         }
 
-        motionFIFO.pop_front();
-        motionFIFO.push_back(buf[2]);
+        motionFIFO.pop();
+        motionFIFO.push(buf[2]);
     } else {    
         // We don't have enough readings yet, so fill up the buffer.
         // Check if we have enough data in the FIFO
-        motionFIFO.push_back(buf[2]);
+        motionFIFO.push(buf[2]);
     }
 }
 
-void pulseFilter(int16_t pulse) {
-    int16_t counter_ma = 0;
-    if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
-        int16_t beat = 0;
-        
-        // TODO: Dr. Wei, do we really need all of them int16_t?
-        uint16_t index_start = 0;
-        uint16_t index_end = 0;
-        uint16_t temp_counter = 0;
-
-        for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
-            if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
-                if (!index_start)
-                    index_start = sample;
-                else if (!index_end) {
-                    if (sample - index_start > PULSE_MAX_BEAT) {
-                        index_end = sample;
-                        // FIXME: fugly math, Dr. Wei please reduce it.
-                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
-                        beat = beat / (temp_counter + 1);
-                        temp_counter += 1;
-                        index_start = 0;
-                        index_end = 0;
-                    }
-                }
-            }
-            if (sample == 1)
-                currentBPM[sample] = beat;
-            else {
-                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
-                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
-            }
-            counter_ma += 1;
-        }
-    } else {
-        pulseFIFO.push_back(pulse);
-    }
-}
+//void pulseFilter(int16_t pulse) {
+//    int16_t counter_ma = 0;
+//    if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
+//        int16_t beat = 0;
+//        
+//        // TODO: Dr. Wei, do we really need all of them int16_t?
+//        uint16_t index_start = 0;
+//        uint16_t index_end = 0;
+//        uint16_t temp_counter = 0;
+//
+//        for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
+//            if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
+//                if (!index_start)
+//                    index_start = sample;
+//                else if (!index_end) {
+//                    if (sample - index_start > PULSE_MAX_BEAT) {
+//                        index_end = sample;
+//                        // FIXME: fugly math, Dr. Wei please reduce it.
+//                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
+//                        beat = beat / (temp_counter + 1);
+//                        temp_counter += 1;
+//                        index_start = 0;
+//                        index_end = 0;
+//                    }
+//                }
+//            }
+//            if (sample == 1)
+//                currentBPM[sample] = beat;
+//            else {
+//                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
+//                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
+//            }
+//            counter_ma += 1;
+//        }
+//    } else {
+//        pulseFIFO.push(pulse);
+//    }
+//}
 
 void printSerial(int16_t* buf) {
     Serial.print(buf[0], DEC);
@@ -305,12 +305,12 @@ void loop() {
 
     //printSerial(buf);
     motionFilter(buf);
-    pulseFilter(buf[7]);
+    //pulseFilter(buf[7]);
 
-    if ((packetCount & PUSH_NOTIF_LIMIT) == 0) {
-        // TODO: Decide on a format of what it means to have a buffer value for fall.
-        uint8_t packet[2] = {1, 0};
-        ble_send(packet, 2, 20);
-    }
+    //if ((packetCount & PUSH_NOTIF_LIMIT) == 0) {
+    //    // TODO: Decide on a format of what it means to have a buffer value for fall.
+    //    uint8_t packet[2] = {1, 0};
+    //    ble_send(packet, 2, 20);
+    //}
 }
 

@@ -22,7 +22,7 @@
 #define SEC_FILTER_LENGTH (70)
 #define FALL_THRESH_LOW (100)
 #define FALL_THRESH_HIGH (550)
-#define PUSH_NOTIF_LIMIT (20)
+#define PUSH_NOTIF_LIMIT (31)
 
 #define PULSE_FILTER_LENGTH (120)
 #define PULSE_THRESH_LOW (1000)
@@ -216,8 +216,8 @@ void motionFilter(int16_t* buf) {
 
         if (sumData.size() >= SEC_FILTER_LENGTH) {
             int16_t total_sum_data = 0;
-            for (uint8_t elem=0; elem < sumData.size(); elem++) {
-                total_sum_data += elem;
+            for (uint8_t i=0; i < sumData.size(); i++) {
+                total_sum_data += sumData[i];
             }
             if (total_sum_data >= FALL_THRESH_HIGH || total_sum_data <= FALL_THRESH_LOW) {
                 Serial.println("Fall detected");
@@ -229,17 +229,15 @@ void motionFilter(int16_t* buf) {
         }
 
         motionFIFO.pop_front();
-        if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2) {
-            motionFIFO.push_back(buf[2]);
-        }
-    } else {    // We don't have enough readings yet, so fill up the buffer.
+        motionFIFO.push_back(buf[2]);
+    } else {    
+        // We don't have enough readings yet, so fill up the buffer.
         // Check if we have enough data in the FIFO
-        if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2)
-            motionFIFO.push_back(buf[2]);
+        motionFIFO.push_back(buf[2]);
     }
 }
 
-void pulseFilter(int16_t* buf) {
+void pulseFilter(int16_t pulse) {
     int16_t counter_ma = 0;
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
         int16_t beat = 0;
@@ -268,14 +266,13 @@ void pulseFilter(int16_t* buf) {
             if (sample == 1)
                 currentBPM[sample] = beat;
             else {
-                currentBPM[sample] = pulseFIFO(currentBPM[sample-1] * counter_ma + beat);
-                currentBPM[sample] = currentBPM / (counter_ma + 1);
+                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
+                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
             }
             counter_ma += 1;
         }
     } else {
-        if (sizeof(buf) >= HALFWORDS_PER_SAMPLE+2)
-            pulseFIFO.push_back(buf[7]);
+        pulseFIFO.push_back(pulse);
     }
 }
 
@@ -299,8 +296,7 @@ void printSerial(int16_t* buf) {
 }
 
 void loop() {
-
-    int16_t buf[HALFWORDS_PER_SAMPLE+2];
+    int16_t buf[HALFWORDS_PER_SAMPLE];
 
     if(!mpu.getIntDataReadyStatus()) return;
     mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
@@ -309,12 +305,12 @@ void loop() {
 
     //printSerial(buf);
     motionFilter(buf);
-    pulseFilter(buf);
+    pulseFilter(buf[7]);
 
-    if (!(packetCount % PUSH_NOTIF_LIMIT)) {
+    if ((packetCount & PUSH_NOTIF_LIMIT) == 0) {
         // TODO: Decide on a format of what it means to have a buffer value for fall.
-        memset(buf, 0, sizeof(buf));
-        ble_send((uint8_t*)buf, HALFWORDS_PER_SAMPLE << 1, 20);
+        uint8_t packet[2] = {1, 0};
+        ble_send(packet, 2, 20);
     }
 }
 

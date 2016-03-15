@@ -23,7 +23,7 @@ LIBS := -lRFduinoSystem -lRFduino -lRFduinoBLE -lRFduinoGZLL
 
 CFLAGS := -c -g -Os -w -ffunction-sections -fdata-sections -fno-builtin -MMD -mcpu=$(MCU) -DF_CPU=$(F_CPU) -mthumb -D__RFduino__ -DARDUINO=100
 CXXFLAGS := -c -g -Os -w -ffunction-sections -fdata-sections -fno-rtti -fno-exceptions -fno-builtin -MMD -mcpu=$(MCU) -DF_CPU=$(F_CPU) -mthumb -D__RFduino__ -DARDUINO=100
-LDFLAGS := -Wl,--gc-sections --specs=nano.specs -mcpu=$(MCU) -mthumb -D__RFduino__ -Wl,-Map,$(PROGRAM).map -Wl,--cref -Wl,--warn-common -Wl,--warn-section-align
+LDFLAGS := -Wl,--gc-sections --specs=nosys.specs -mcpu=$(MCU) -mthumb -D__RFduino__ -Wl,-Map,$(PROGRAM).map -Wl,--cref -Wl,--warn-common -Wl,--warn-section-align
 ASFLAGS := -c -g -assembler-with-cpp
 ARFLAGS := rcs
 OCFLAGS := -O ihex

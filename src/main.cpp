@@ -27,6 +27,10 @@
 #define PULSE_MAX_BEAT (9)
 #define PULSE_TOTAL_INDEX (1200)
 
+#define SCALE_FACTOR (12)
+#define SCALE(x) ((x) << SCALE_FACTOR)
+#define DESCALE(x) ((x) >> SCALE_FACTOR)
+
 MPU6050 mpu;
 
 qqueue64<int32_t> motionFIFO;
@@ -196,7 +200,6 @@ uint8_t pulse_filter(int16_t pulse) {
     uint8_t abnormal_pulse = 0;
     uint32_t beat = 0;
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
-        // TODO: Dr. Wei, do we really need all of them int16_t?
         int32_t index_start = -1;
         int32_t index_end = -1;
         uint32_t temp_counter = 0;
@@ -208,8 +211,7 @@ uint8_t pulse_filter(int16_t pulse) {
                 else if (index_end == -1) {
                     if ((sample - index_start) > PULSE_MAX_BEAT) {
                         index_end = sample;
-                        // FIXME: fugly math, Dr. Wei please reduce it.
-                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX / (index_end - index_start))/(temp_counter+1);
+                        beat = (beat * temp_counter + SCALE(PULSE_TOTAL_INDEX) / (index_end - index_start))/(temp_counter+1);
                         temp_counter += 1;
                         index_start = -1;
                         index_end = -1;
@@ -217,7 +219,7 @@ uint8_t pulse_filter(int16_t pulse) {
                 }
             }
         }
-        
+       
         bpm_till_now = (bpm_till_now * counter_ma + beat) / (counter_ma + 1);
         counter_ma += 1;
 
@@ -262,7 +264,7 @@ void loop() {
     ble_packet[0] = motion_filter(buf);
     ble_packet[1] = pulse_filter(pulse);
     ble_packet[2] = temp;
-    ble_packet[3] = bpm_till_now;
+    ble_packet[3] = DESCALE(bpm_till_now);
 
     ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
     if(ble_packet[0]) {
@@ -270,9 +272,4 @@ void loop() {
         ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
       }
     }
-
-    Serial.print(millis());
-    Serial.print(",");
-    Serial.println(ble_packet[3]);
 }
-

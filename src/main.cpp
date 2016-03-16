@@ -14,7 +14,7 @@
 
 #define MPU6050_DATA_IRQ (2)
 
-#define BURST_PACKET_LENGTH (20)
+#define PACKET_BURST_LENGTH (20)
 #define BLE_TIMEOUT (20)
 
 #define FILTER_LENGTH (50)

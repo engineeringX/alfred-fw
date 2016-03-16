@@ -80,7 +80,7 @@ T qqueue64<T>::operator[](int i) const {
 }
 
 template <typename T>
-T qqueue64<T>::clear() {
+void qqueue64<T>::clear() {
   s = 0;
   head = 0;
   tail = 0;
@@ -160,7 +160,7 @@ T qqueue128<T>::operator[](int i) const {
 }
 
 template <typename T>
-T qqueue128<T>::clear() {
+void qqueue128<T>::clear() {
   s = 0;
   head = 0;
   tail = 0;

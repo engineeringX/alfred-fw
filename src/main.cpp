@@ -20,8 +20,8 @@
 
 #define FILTER_LENGTH (50)
 #define SEC_FILTER_LENGTH (70)
-#define FALL_THRESH_LOW (-15000000)
-#define FALL_THRESH_HIGH (15000000)
+#define FALL_THRESH_LOW (-2000000000)
+#define FALL_THRESH_HIGH (2000000000)
 #define PUSH_NOTIF_LIMIT (31)
 
 #define PULSE_FILTER_LENGTH (120)
@@ -36,8 +36,8 @@ MPU6050 mpu;
 //size_t count;
 uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
-qqueue64<int16_t> motionFIFO;
-int16_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
+qqueue64<int32_t> motionFIFO;
+int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
@@ -281,7 +281,7 @@ void printSerial(int16_t* buf) {
     Serial.print(buf[6], DEC);
     Serial.print(",");
     Serial.print(buf[7], DEC);
-    Serial.println();
+    Serial.print(",");
 }
 
 void loop() {

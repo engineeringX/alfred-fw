@@ -34,8 +34,8 @@ int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
-qqueue128<int16_t> pulseFIFO;
-int16_t currentBPM[PULSE_FILTER_LENGTH] = {0};
+qqueue128<int32_t> pulseFIFO;
+int32_t currentBPM[PULSE_FILTER_LENGTH] = {0};
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -165,7 +165,7 @@ void setup() {
     mpu.setIntDataReadyEnabled(true);
 }
 
-uint8_t motionFilter(int16_t* buf) {
+uint8_t motion_filter(int16_t* buf) {
     int64_t outputSignal = 0;
     uint8_t fall_detected = 0;
 
@@ -176,7 +176,7 @@ uint8_t motionFilter(int16_t* buf) {
         }
 
         if (outputSignal >= FALL_THRESH_HIGH || outputSignal <= FALL_THRESH_LOW) {
-            Serial.println("Fall detected");
+            //Serial.println("Fall detected");
             fall_detected = 1;
         }
 
@@ -191,44 +191,47 @@ uint8_t motionFilter(int16_t* buf) {
     return fall_detected;
 }
 
-//void pulseFilter(int16_t pulse) {
-//    int16_t counter_ma = 0;
-//    if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
-//        int16_t beat = 0;
-//        
-//        // TODO: Dr. Wei, do we really need all of them int16_t?
-//        uint16_t index_start = 0;
-//        uint16_t index_end = 0;
-//        uint16_t temp_counter = 0;
-//
-//        for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
-//            if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
-//                if (!index_start)
-//                    index_start = sample;
-//                else if (!index_end) {
-//                    if (sample - index_start > PULSE_MAX_BEAT) {
-//                        index_end = sample;
-//                        // FIXME: fugly math, Dr. Wei please reduce it.
-//                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
-//                        beat = beat / (temp_counter + 1);
-//                        temp_counter += 1;
-//                        index_start = 0;
-//                        index_end = 0;
-//                    }
-//                }
-//            }
-//            if (sample == 1)
-//                currentBPM[sample] = beat;
-//            else {
-//                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
-//                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
-//            }
-//            counter_ma += 1;
-//        }
-//    } else {
-//        pulseFIFO.push(pulse);
-//    }
-//}
+int16_t pulse_filter(int16_t pulse) {
+    int32_t counter_ma = 0;
+    int32_t beat = 0;
+    if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
+        // TODO: Dr. Wei, do we really need all of them int16_t?
+        uint32_t index_start = 0;
+        uint32_t index_end = 0;
+        uint32_t temp_counter = 0;
+
+        for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
+            if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
+                if (!index_start)
+                    index_start = sample;
+                else if (!index_end) {
+                    if (sample - index_start > PULSE_MAX_BEAT) {
+                        index_end = sample;
+                        // FIXME: fugly math, Dr. Wei please reduce it.
+                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
+                        beat = beat / (temp_counter + 1);
+                        temp_counter += 1;
+                        index_start = 0;
+                        index_end = 0;
+                    }
+                }
+            }
+            if (sample == 1)
+                currentBPM[sample] = beat;
+            else {
+                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
+                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
+            }
+            counter_ma += 1;
+            //Serial.print(beat, DEC);
+            //Serial.println();
+        }
+    } else {
+        pulseFIFO.push(pulse);
+    }
+
+    return currentBPM[PULSE_FILTER_LENGTH-1];
+}
 
 void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz, int16_t temp, int16_t pulse) {
     Serial.print(ax, DEC);
@@ -251,21 +254,21 @@ void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int
 
 void loop() {
     int16_t buf[6];
-    int16_t ble_packet[3];
+    int16_t ble_packet[4];
 
     if(!mpu.getIntDataReadyStatus()) return;
     mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
-    ble_packet[1] = tmp007_read_obj_temp();
-    ble_packet[2] = analogRead(2);
+    ble_packet[2] = tmp007_read_obj_temp();
+    ble_packet[3] = analogRead(2);
 
     //printSerial(buf[0], buf[1], buf[2],, buf[3], buf[4], buf[5], ble_packet[1], ble_packet[2]);
-    ble_packet[0] = motionFilter(buf);
-    //pulseFilter(ble_packet[2]);
+    ble_packet[0] = motion_filter(buf);
+    ble_packet[1] = pulse_filter(ble_packet[3]);
 
-    ble_send((uint8_t*)ble_packet, 6, 20);
+    ble_send((uint8_t*)ble_packet, 8, 20);
     if(ble_packet[0]) {
       for(uint8_t i = 0; i < 20; i++) {
-        ble_send((uint8_t*)ble_packet, 6, 20);
+        ble_send((uint8_t*)ble_packet, 8, 20);
       }
     }
 }

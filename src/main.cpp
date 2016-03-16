@@ -22,7 +22,7 @@
 #define FALL_THRESH_HIGH (2000000000)
 
 #define PULSE_FILTER_LENGTH (120)
-#define PULSE_THRESH_LOW (1000)
+#define PULSE_THRESH_LOW (950)
 #define PULSE_THRESH_HIGH (1005)
 #define PULSE_MAX_BEAT (9)
 #define PULSE_TOTAL_INDEX (1200)
@@ -34,8 +34,9 @@ int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
-qqueue128<int32_t> pulseFIFO;
-int32_t currentBPM[PULSE_FILTER_LENGTH] = {0};
+qqueue128<uint32_t> pulseFIFO;
+uint32_t counter_ma = 0;
+uint32_t bpm_till_now = 0;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -191,46 +192,42 @@ uint8_t motion_filter(int16_t* buf) {
     return fall_detected;
 }
 
-int16_t pulse_filter(int16_t pulse) {
-    int32_t counter_ma = 0;
-    int32_t beat = 0;
+uint8_t pulse_filter(int16_t pulse) {
+    uint8_t abnormal_pulse = 0;
+    uint32_t beat = 0;
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
         // TODO: Dr. Wei, do we really need all of them int16_t?
-        uint32_t index_start = 0;
-        uint32_t index_end = 0;
+        int32_t index_start = -1;
+        int32_t index_end = -1;
         uint32_t temp_counter = 0;
 
         for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
             if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
-                if (!index_start)
+                if (index_start == -1)
                     index_start = sample;
-                else if (!index_end) {
-                    if (sample - index_start > PULSE_MAX_BEAT) {
+                else if (index_end == -1) {
+                    if ((sample - index_start) > PULSE_MAX_BEAT) {
                         index_end = sample;
                         // FIXME: fugly math, Dr. Wei please reduce it.
-                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX) / (index_end - index_start);
-                        beat = beat / (temp_counter + 1);
+                        beat = (beat * temp_counter + PULSE_TOTAL_INDEX / (index_end - index_start))/(temp_counter+1);
                         temp_counter += 1;
-                        index_start = 0;
-                        index_end = 0;
+                        index_start = -1;
+                        index_end = -1;
                     }
                 }
             }
-            if (sample == 1)
-                currentBPM[sample] = beat;
-            else {
-                currentBPM[sample] = pulseFIFO[currentBPM[sample-1] * counter_ma + beat];
-                currentBPM[sample] = currentBPM[sample] / (counter_ma + 1);
-            }
-            counter_ma += 1;
-            //Serial.print(beat, DEC);
-            //Serial.println();
         }
+        
+        bpm_till_now = (bpm_till_now * counter_ma + beat) / (counter_ma + 1);
+        counter_ma += 1;
+
+        pulseFIFO.pop();
+        pulseFIFO.push(pulse);
     } else {
         pulseFIFO.push(pulse);
     }
 
-    return currentBPM[PULSE_FILTER_LENGTH-1];
+    return abnormal_pulse;
 }
 
 void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz, int16_t temp, int16_t pulse) {
@@ -254,16 +251,18 @@ void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int
 
 void loop() {
     int16_t buf[6];
-    int16_t ble_packet[4];
 
     if(!mpu.getIntDataReadyStatus()) return;
     mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
-    ble_packet[2] = tmp007_read_obj_temp();
-    ble_packet[3] = analogRead(2);
+    int16_t temp = tmp007_read_obj_temp();
+    int16_t pulse = analogRead(2);
 
-    //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], ble_packet[1], ble_packet[2]);
+    //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], temp, pulse);
+    int16_t ble_packet[4];
     ble_packet[0] = motion_filter(buf);
-    ble_packet[1] = pulse_filter(ble_packet[3]);
+    ble_packet[1] = pulse_filter(pulse);
+    ble_packet[2] = temp;
+    ble_packet[3] = bpm_till_now;
 
     ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
     if(ble_packet[0]) {
@@ -271,5 +270,9 @@ void loop() {
         ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
       }
     }
+
+    Serial.print(millis());
+    Serial.print(",");
+    Serial.println(ble_packet[3]);
 }
 

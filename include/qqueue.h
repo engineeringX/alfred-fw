@@ -25,6 +25,9 @@ class qqueue64 {
     // Get and element from index
     T operator[](int i) const;
 
+    // Clear the queue
+    void clear();
+
   private:
     T q[QQUEUE64_CAPACITY];
 
@@ -77,6 +80,13 @@ T qqueue64<T>::operator[](int i) const {
 }
 
 template <typename T>
+T qqueue64<T>::clear() {
+  s = 0;
+  head = 0;
+  tail = 0;
+}
+
+template <typename T>
 class qqueue128 {
   public:
     // Create a queue 
@@ -94,6 +104,9 @@ class qqueue128 {
 
     // Get and element from index
     T operator[](int i) const;
+
+    // Clear the queue
+    void clear();
 
   private:
     T q[QQUEUE128_CAPACITY];
@@ -144,6 +157,13 @@ T qqueue128<T>::operator[](int i) const {
   if(i >= s) return T();
   int idx = head + i;
   return q[(idx < QQUEUE128_CAPACITY) ? idx : (idx - QQUEUE128_CAPACITY)];
+}
+
+template <typename T>
+T qqueue128<T>::clear() {
+  s = 0;
+  head = 0;
+  tail = 0;
 }
 
 #endif // __QQUEUE_H__

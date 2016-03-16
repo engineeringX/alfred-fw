@@ -14,8 +14,8 @@
 
 #define MPU6050_DATA_IRQ (2)
 
-#define BYTES_PER_SAMPLE (12)
-#define BUF_SIZE (1022)
+#define BURST_PACKET_LENGTH (20)
+#define BLE_TIMEOUT (20)
 
 #define FILTER_LENGTH (50)
 #define FALL_THRESH_LOW (-2000000000)
@@ -261,14 +261,14 @@ void loop() {
     ble_packet[2] = tmp007_read_obj_temp();
     ble_packet[3] = analogRead(2);
 
-    //printSerial(buf[0], buf[1], buf[2],, buf[3], buf[4], buf[5], ble_packet[1], ble_packet[2]);
+    //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], ble_packet[1], ble_packet[2]);
     ble_packet[0] = motion_filter(buf);
     ble_packet[1] = pulse_filter(ble_packet[3]);
 
-    ble_send((uint8_t*)ble_packet, 8, 20);
+    ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
     if(ble_packet[0]) {
-      for(uint8_t i = 0; i < 20; i++) {
-        ble_send((uint8_t*)ble_packet, 8, 20);
+      for(uint8_t i = 0; i < PACKET_BURST_LENGTH; i++) {
+        ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
       }
     }
 }

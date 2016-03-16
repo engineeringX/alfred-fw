@@ -20,8 +20,8 @@
 
 #define FILTER_LENGTH (50)
 #define SEC_FILTER_LENGTH (70)
-#define FALL_THRESH_LOW (100)
-#define FALL_THRESH_HIGH (550)
+#define FALL_THRESH_LOW (-15000000)
+#define FALL_THRESH_HIGH (15000000)
 #define PUSH_NOTIF_LIMIT (31)
 
 #define PULSE_FILTER_LENGTH (120)
@@ -37,7 +37,6 @@ MPU6050 mpu;
 uint16_t packetCount = 0;
 uint16_t dataPoint = 0;
 qqueue64<int16_t> motionFIFO;
-qqueue128<int32_t> sumData;
 int16_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
@@ -207,33 +206,23 @@ void motionFilter(int16_t* buf) {
         for(uint8_t sample=0; sample<FILTER_LENGTH; ++sample) {
             outputSignal = outputSignal + weights[sample] * motionFIFO[sample];
         }
-        Serial.print(dataPoint);
-        Serial.print(":");
-        Serial.print(outputSignal);
-        Serial.println();
+        //Serial.print(dataPoint);
+        //Serial.print(":");
+        //Serial.print(outputSignal);
+        //Serial.println();
 
-        sumData.push(outputSignal);
-
-        if (sumData.size() >= SEC_FILTER_LENGTH) {
-            int16_t total_sum_data = 0;
-            for (uint8_t i=0; i < sumData.size(); i++) {
-                total_sum_data += sumData[i];
-            }
-            if (total_sum_data >= FALL_THRESH_HIGH || total_sum_data <= FALL_THRESH_LOW) {
-                Serial.println("Fall detected");
-                Serial.print("Total Sum Data: ");
-                Serial.print(total_sum_data, DEC);
-                packetCount++;
-            }
-            sumData.pop();
+        if (outputSignal >= FALL_THRESH_HIGH || outputSignal <= FALL_THRESH_LOW) {
+            Serial.println("Fall detected");
+            Serial.print("Total Sum Data: ");
+            Serial.println(outputSignal);
         }
 
         motionFIFO.pop();
-        motionFIFO.push(buf[2]);
+        motionFIFO.push(buf[1]);
     } else {    
         // We don't have enough readings yet, so fill up the buffer.
         // Check if we have enough data in the FIFO
-        motionFIFO.push(buf[2]);
+        motionFIFO.push(buf[1]);
     }
 }
 

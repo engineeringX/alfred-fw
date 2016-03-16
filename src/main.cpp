@@ -14,15 +14,12 @@
 
 #define MPU6050_DATA_IRQ (2)
 
-#define HALFWORDS_PER_SAMPLE (8)
 #define BYTES_PER_SAMPLE (12)
 #define BUF_SIZE (1022)
 
 #define FILTER_LENGTH (50)
-#define SEC_FILTER_LENGTH (70)
 #define FALL_THRESH_LOW (-2000000000)
 #define FALL_THRESH_HIGH (2000000000)
-#define PUSH_NOTIF_LIMIT (31)
 
 #define PULSE_FILTER_LENGTH (120)
 #define PULSE_THRESH_LOW (1000)
@@ -32,17 +29,13 @@
 
 MPU6050 mpu;
 
-//int16_t buf[BUF_SIZE];
-//size_t count;
-uint16_t packetCount = 0;
-uint16_t dataPoint = 0;
 qqueue64<int32_t> motionFIFO;
 int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20, 134,
                      254, 264, 142, -72, -276, -364, -284, -60, 202, 376, 376, 202, -60,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
 qqueue128<int16_t> pulseFIFO;
-int16_t currentBPM[PULSE_FILTER_LENGTH];
+int16_t currentBPM[PULSE_FILTER_LENGTH] = {0};
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -142,14 +135,8 @@ void ble_send(uint8_t* data, size_t size, uint32_t ms)
     RFduinoBLE.end();
 }
 
-void filterInit() {
-    memset(currentBPM, 0, PULSE_FILTER_LENGTH); 
-}
-
 int main() {
     init();
-
-    //filterInit();
 
     setup();
     for(;;) {
@@ -158,21 +145,6 @@ int main() {
 
     return 0;
 }
-
-//int mpu6050_data_ready(long unsigned int unused)
-//{
-//  //if(!mpu.getIntDataReadyStatus()) return unused;
-//  mpu.getIntDataReadyStatus();
-//  Serial.println("WORKING");
-//  if(count < BUF_SIZE)
-//  {
-//    mpu.getMotion6(buf+count, buf+count+1, buf+count+2, buf+count+3, buf+count+4, buf+count+5);
-//    count += 6;
-//  }
-//
-//  return unused;
-//}
-
 
 void setup() {
     //RFduino_systemReset();
@@ -191,30 +163,21 @@ void setup() {
     mpu.setFIFOEnabled(true);
 
     mpu.setIntDataReadyEnabled(true);
-
-    //pinMode(MPU6050_DATA_IRQ, INPUT);
-    //RFduino_pinWakeCallback(MPU6050_DATA_IRQ, HIGH, mpu6050_data_ready);
-    //mpu.getIntStatus();
 }
 
-void motionFilter(int16_t* buf) {
-    dataPoint += 1;
-    int32_t outputSignal = 0;
+uint8_t motionFilter(int16_t* buf) {
+    int64_t outputSignal = 0;
+    uint8_t fall_detected = 0;
 
     // FIXME: We need at least 50 readings in motionFIFO 
     if (motionFIFO.size() >= FILTER_LENGTH) {
         for(uint8_t sample=0; sample<FILTER_LENGTH; ++sample) {
-            outputSignal = outputSignal + weights[sample] * motionFIFO[sample];
+            outputSignal = outputSignal + (int64_t)weights[sample] * (int64_t)motionFIFO[sample];
         }
-        //Serial.print(dataPoint);
-        //Serial.print(":");
-        //Serial.print(outputSignal);
-        //Serial.println();
 
         if (outputSignal >= FALL_THRESH_HIGH || outputSignal <= FALL_THRESH_LOW) {
             Serial.println("Fall detected");
-            Serial.print("Total Sum Data: ");
-            Serial.println(outputSignal);
+            fall_detected = 1;
         }
 
         motionFIFO.pop();
@@ -224,6 +187,8 @@ void motionFilter(int16_t* buf) {
         // Check if we have enough data in the FIFO
         motionFIFO.push(buf[1]);
     }
+
+    return fall_detected;
 }
 
 //void pulseFilter(int16_t pulse) {
@@ -265,41 +230,43 @@ void motionFilter(int16_t* buf) {
 //    }
 //}
 
-void printSerial(int16_t* buf) {
-    Serial.print(buf[0], DEC);
+void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz, int16_t temp, int16_t pulse) {
+    Serial.print(ax, DEC);
     Serial.print(",");
-    Serial.print(buf[1], DEC);
+    Serial.print(ay, DEC);
     Serial.print(",");
-    Serial.print(buf[2], DEC);
+    Serial.print(az, DEC);
     Serial.print(",");
-    Serial.print(buf[3], DEC);
+    Serial.print(gx, DEC);
     Serial.print(",");
-    Serial.print(buf[4], DEC);
+    Serial.print(gy, DEC);
     Serial.print(",");
-    Serial.print(buf[5], DEC);
+    Serial.print(gz, DEC);
     Serial.print(",");
-    Serial.print(buf[6], DEC);
+    Serial.print(temp, DEC);
     Serial.print(",");
-    Serial.print(buf[7], DEC);
+    Serial.print(pulse, DEC);
     Serial.print(",");
 }
 
 void loop() {
-    int16_t buf[HALFWORDS_PER_SAMPLE];
+    int16_t buf[6];
+    int16_t ble_packet[3];
 
     if(!mpu.getIntDataReadyStatus()) return;
     mpu.getMotion6(buf, buf+1, buf+2, buf+3, buf+4, buf+5);
-    *(buf+6) = tmp007_read_obj_temp();
-    *(buf+7) = analogRead(2);
+    ble_packet[1] = tmp007_read_obj_temp();
+    ble_packet[2] = analogRead(2);
 
-    //printSerial(buf);
-    motionFilter(buf);
-    //pulseFilter(buf[7]);
+    //printSerial(buf[0], buf[1], buf[2],, buf[3], buf[4], buf[5], ble_packet[1], ble_packet[2]);
+    ble_packet[0] = motionFilter(buf);
+    //pulseFilter(ble_packet[2]);
 
-    //if ((packetCount & PUSH_NOTIF_LIMIT) == 0) {
-    //    // TODO: Decide on a format of what it means to have a buffer value for fall.
-    //    uint8_t packet[2] = {1, 0};
-    //    ble_send(packet, 2, 20);
-    //}
+    ble_send((uint8_t*)ble_packet, 6, 20);
+    if(ble_packet[0]) {
+      for(uint8_t i = 0; i < 20; i++) {
+        ble_send((uint8_t*)ble_packet, 6, 20);
+      }
+    }
 }
 

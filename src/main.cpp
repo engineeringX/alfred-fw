@@ -3,6 +3,10 @@
 #include "MPU6050.h"
 #include "qqueue.h"
 
+#define SCALE_FACTOR (12)
+#define SCALE(x) ((x) << SCALE_FACTOR)
+#define DESCALE(x) ((x) >> SCALE_FACTOR)
+
 #define TMP007_DEV_ADDR (0x40)
 #define TMP007_REG_OBJTEMP (0x03)
 #define TMP007_REG_DEVICE_ID (0x1F)
@@ -27,9 +31,11 @@
 #define PULSE_MAX_BEAT (9)
 #define PULSE_TOTAL_INDEX (1200)
 
-#define SCALE_FACTOR (12)
-#define SCALE(x) ((x) << SCALE_FACTOR)
-#define DESCALE(x) ((x) >> SCALE_FACTOR)
+#define BPM_THRESH_HIGH (120)
+#define BPM_THRESH_LOW (40)
+
+#define TEMP_THRESH_HIGH (35)
+#define TEMP_THRESH_LOW (20)
 
 MPU6050 mpu;
 
@@ -39,8 +45,10 @@ int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
 qqueue128<uint32_t> pulseFIFO;
-uint32_t counter_ma = 0;
+uint32_t pulse_counter = 0;
 uint32_t bpm_till_now = 0;
+uint32_t temp_counter = 0;
+int32_t temp_till_now  = 0;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -220,8 +228,8 @@ uint8_t pulse_filter(int16_t pulse) {
             }
         }
        
-        bpm_till_now = (bpm_till_now * counter_ma + beat) / (counter_ma + 1);
-        counter_ma += 1;
+        bpm_till_now = (bpm_till_now * pulse_counter + beat) / (pulse_counter + 1);
+        pulse_counter += 1;
 
         pulseFIFO.pop();
         pulseFIFO.push(pulse);
@@ -229,7 +237,24 @@ uint8_t pulse_filter(int16_t pulse) {
         pulseFIFO.push(pulse);
     }
 
-    return abnormal_pulse;
+    uint32_t descaled_bpm = DESCALE(bpm_till_now);
+    if(descaled_bpm > uint32_t(BPM_THRESH_HIGH) || descaled_bpm < uint32_t(BPM_THRESH_LOW)) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+uint8_t temp_filter(int16_t temp) {
+    temp_till_now = (temp_till_now * temp_counter + SCALE(temp)) / (temp_counter + 1);
+    temp_counter += 1;
+
+    uint32_t descaled_temp = DESCALE(temp_till_now);
+    if(descaled_temp > TEMP_THRESH_HIGH || descaled_temp < TEMP_THRESH_LOW) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz, int16_t temp, int16_t pulse) {
@@ -248,7 +273,7 @@ void printSerial(int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int
     Serial.print(temp, DEC);
     Serial.print(",");
     Serial.print(pulse, DEC);
-    Serial.print(",");
+    Serial.println();
 }
 
 void loop() {
@@ -260,16 +285,17 @@ void loop() {
     int16_t pulse = analogRead(2);
 
     //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], temp, pulse);
-    int16_t ble_packet[4];
+    int16_t ble_packet[5];
     ble_packet[0] = motion_filter(buf);
     ble_packet[1] = pulse_filter(pulse);
-    ble_packet[2] = temp;
-    ble_packet[3] = DESCALE(bpm_till_now);
+    ble_packet[2] = temp_filter(temp);
+    ble_packet[3] = DESCALE(temp_till_now);
+    ble_packet[4] = DESCALE(bpm_till_now);
 
-    ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
+    ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
     if(ble_packet[0]) {
       for(uint8_t i = 0; i < PACKET_BURST_LENGTH; i++) {
-        ble_send((uint8_t*)ble_packet, 8, BLE_TIMEOUT);
+        ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
       }
     }
 }

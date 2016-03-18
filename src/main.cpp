@@ -117,10 +117,15 @@ void ble_send(uint8_t* data, size_t size, uint32_t ms)
     uint8_t bytes = 0;
     uint8_t buf[31];
 
-    // Device name: 'a'
-    buf[bytes++] = 0x02;
+    // Device name: 'ALFRED'
+    buf[bytes++] = 0x07;
     buf[bytes++] = 0x09;
     buf[bytes++] = 0x41;
+    buf[bytes++] = 0x4C;
+    buf[bytes++] = 0x46;
+    buf[bytes++] = 0x52;
+    buf[bytes++] = 0x45;
+    buf[bytes++] = 0x44;
 
     // flags: general discovery mode | br edr not supported 
     buf[bytes++] = 0x02;

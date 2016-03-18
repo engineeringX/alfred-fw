@@ -37,6 +37,13 @@
 #define TEMP_THRESH_HIGH (1120)
 #define TEMP_THRESH_LOW (640)
 
+#define MOTION_FILTER_MASK (0)
+#define PULSE_FILTER_MASK (1)
+#define TEMP_FILTER_MASK (2)
+#define SET_MOTION_FILTER_FLAG(x) ((x) << MOTION_FILTER_MASK)
+#define SET_PULSE_FILTER_FLAG(x) ((x) << PULSE_FILTER_MASK)
+#define SET_TEMP_FILTER_FLAG(x) ((x) << TEMP_FILTER_MASK)
+
 MPU6050 mpu;
 
 qqueue64<int32_t> motionFIFO;
@@ -210,7 +217,7 @@ uint8_t pulse_filter(int16_t pulse) {
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
         int32_t index_start = -1;
         int32_t index_end = -1;
-        uint32_t temp_counter = 0;
+        uint64_t temp_counter = 0;
 
         for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
             if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
@@ -285,17 +292,15 @@ void loop() {
     int16_t pulse = analogRead(2);
 
     //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], temp, pulse);
-    int16_t ble_packet[5];
-    ble_packet[0] = motion_filter(buf);
-    ble_packet[1] = pulse_filter(pulse);
-    ble_packet[2] = temp_filter(temp);
-    ble_packet[3] = DESCALE(temp_till_now);
-    ble_packet[4] = DESCALE(bpm_till_now);
+    int16_t ble_packet[3];
+    ble_packet[0] = SET_MOTION_FILTER_FLAG(motion_filter(buf)) | SET_PULSE_FILTER_FLAG(pulse_filter(pulse)) | SET_TEMP_FILTER_FLAG(temp_filter(temp)) ;
+    ble_packet[1] = DESCALE(temp_till_now);
+    ble_packet[2] = DESCALE(bpm_till_now);
 
-    ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
+    ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
     if(ble_packet[0]) {
       for(uint8_t i = 0; i < PACKET_BURST_LENGTH; i++) {
-        ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
+        ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
       }
     }
 }

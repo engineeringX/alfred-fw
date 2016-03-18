@@ -45,10 +45,10 @@ int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
 qqueue128<uint32_t> pulseFIFO;
-uint32_t pulse_counter = 0;
-uint32_t bpm_till_now = 0;
-uint32_t temp_counter = 0;
-int32_t temp_till_now  = 0;
+uint64_t pulse_counter = 0;
+uint64_t bpm_till_now = 0;
+uint64_t temp_counter = 0;
+int64_t temp_till_now  = 0;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -206,7 +206,7 @@ uint8_t motion_filter(int16_t* buf) {
 
 uint8_t pulse_filter(int16_t pulse) {
     uint8_t abnormal_pulse = 0;
-    uint32_t beat = 0;
+    uint64_t beat = 0;
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
         int32_t index_start = -1;
         int32_t index_end = -1;
@@ -237,8 +237,8 @@ uint8_t pulse_filter(int16_t pulse) {
         pulseFIFO.push(pulse);
     }
 
-    uint32_t descaled_bpm = DESCALE(bpm_till_now);
-    if(descaled_bpm > uint32_t(BPM_THRESH_HIGH) || descaled_bpm < uint32_t(BPM_THRESH_LOW)) {
+    uint64_t descaled_bpm = DESCALE(bpm_till_now);
+    if(descaled_bpm > uint64_t(BPM_THRESH_HIGH) || descaled_bpm < uint64_t(BPM_THRESH_LOW)) {
         return 1;
     } else {
         return 0;
@@ -249,7 +249,7 @@ uint8_t temp_filter(int16_t temp) {
     temp_till_now = (temp_till_now * temp_counter + SCALE(temp)) / (temp_counter + 1);
     temp_counter += 1;
 
-    int32_t descaled_temp = DESCALE(temp_till_now);
+    int64_t descaled_temp = DESCALE(temp_till_now);
     if(descaled_temp > TEMP_THRESH_HIGH || descaled_temp < TEMP_THRESH_LOW) {
         return 1;
     } else {

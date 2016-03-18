@@ -249,7 +249,7 @@ uint8_t temp_filter(int16_t temp) {
     temp_till_now = (temp_till_now * temp_counter + SCALE(temp)) / (temp_counter + 1);
     temp_counter += 1;
 
-    uint32_t descaled_temp = DESCALE(temp_till_now);
+    int32_t descaled_temp = DESCALE(temp_till_now);
     if(descaled_temp > TEMP_THRESH_HIGH || descaled_temp < TEMP_THRESH_LOW) {
         return 1;
     } else {

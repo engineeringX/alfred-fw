@@ -34,8 +34,8 @@
 #define BPM_THRESH_HIGH (120)
 #define BPM_THRESH_LOW (40)
 
-#define TEMP_THRESH_HIGH (35)
-#define TEMP_THRESH_LOW (20)
+#define TEMP_THRESH_HIGH (1120)
+#define TEMP_THRESH_LOW (640)
 
 MPU6050 mpu;
 

@@ -38,8 +38,11 @@
 #define TEMP_THRESH_LOW (640)
 
 #define MOTION_FILTER_MASK (0)
+#define MOTION_FILTER_FLAG (0x1)
 #define PULSE_FILTER_MASK (1)
+#define PULSE_FILTER_FLAG (0x2)
 #define TEMP_FILTER_MASK (2)
+#define TEMP_FILTER_FLAG (0x4)
 #define SET_MOTION_FILTER_FLAG(x) ((x) << MOTION_FILTER_MASK)
 #define SET_PULSE_FILTER_FLAG(x) ((x) << PULSE_FILTER_MASK)
 #define SET_TEMP_FILTER_FLAG(x) ((x) << TEMP_FILTER_MASK)
@@ -303,7 +306,7 @@ void loop() {
     ble_packet[2] = DESCALE(bpm_till_now);
 
     ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
-    if(ble_packet[0]) {
+    if(ble_packet[0] & MOTION_FILTER_FLAG) {
       for(uint8_t i = 0; i < PACKET_BURST_LENGTH; i++) {
         ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
       }

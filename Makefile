@@ -12,7 +12,9 @@ PROGRAM := alfred
 MCU := cortex-m0
 F_CPU := 16000000
 #SERIAL_PORT := /dev/cu.usbserial-DN00CYBM 
-SERIAL_PORT := /dev/cu.usbserial-DA01LUCG 
+#SERIAL_PORT := /dev/cu.usbserial-DA01LUCG
+# New PCB
+SERIAL_PORT := /dev/cu.usbserial-DA01LUCJ 
 
 INCLUDES := -Iinclude -Iinclude/RFduino -Iinclude/RFduino/include -Iinclude/CMSIS/CMSIS/include
 LIB_DIR := -Llib 

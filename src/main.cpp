@@ -37,6 +37,16 @@
 #define TEMP_THRESH_HIGH (1120)
 #define TEMP_THRESH_LOW (640)
 
+#define MOTION_FILTER_MASK (0)
+#define MOTION_FILTER_FLAG (0x1)
+#define PULSE_FILTER_MASK (1)
+#define PULSE_FILTER_FLAG (0x2)
+#define TEMP_FILTER_MASK (2)
+#define TEMP_FILTER_FLAG (0x4)
+#define SET_MOTION_FILTER_FLAG(x) ((x) << MOTION_FILTER_MASK)
+#define SET_PULSE_FILTER_FLAG(x) ((x) << PULSE_FILTER_MASK)
+#define SET_TEMP_FILTER_FLAG(x) ((x) << TEMP_FILTER_MASK)
+
 MPU6050 mpu;
 
 qqueue64<int32_t> motionFIFO;
@@ -45,10 +55,10 @@ int32_t weights[] = {-6, -18, -26, -22, 0, 32, 66, 74, 40, -34, -116, -164, -20,
                      -284, -364, -276, -72, 142, 264, 254, 134, -20, -134, -164, -116, -34, 40,
                      74, 66, 32, 0, -22, -26, -18, -6};
 qqueue128<uint32_t> pulseFIFO;
-uint32_t pulse_counter = 0;
-uint32_t bpm_till_now = 0;
-uint32_t temp_counter = 0;
-int32_t temp_till_now  = 0;
+uint64_t pulse_counter = 0;
+uint64_t bpm_till_now = 0;
+uint64_t temp_counter = 0;
+int64_t temp_till_now  = 0;
 
 void read_bytes(uint8_t dev_addr, uint8_t reg_addr, uint8_t length, uint8_t* data) {
     Wire.beginTransmission(dev_addr);
@@ -110,10 +120,15 @@ void ble_send(uint8_t* data, size_t size, uint32_t ms)
     uint8_t bytes = 0;
     uint8_t buf[31];
 
-    // Device name: 'a'
-    buf[bytes++] = 0x02;
+    // Device name: 'ALFRED'
+    buf[bytes++] = 0x07;
     buf[bytes++] = 0x09;
     buf[bytes++] = 0x41;
+    buf[bytes++] = 0x4C;
+    buf[bytes++] = 0x46;
+    buf[bytes++] = 0x52;
+    buf[bytes++] = 0x45;
+    buf[bytes++] = 0x44;
 
     // flags: general discovery mode | br edr not supported 
     buf[bytes++] = 0x02;
@@ -206,11 +221,11 @@ uint8_t motion_filter(int16_t* buf) {
 
 uint8_t pulse_filter(int16_t pulse) {
     uint8_t abnormal_pulse = 0;
-    uint32_t beat = 0;
+    uint64_t beat = 0;
     if (pulseFIFO.size() >= PULSE_FILTER_LENGTH) {
         int32_t index_start = -1;
         int32_t index_end = -1;
-        uint32_t temp_counter = 0;
+        uint64_t temp_counter = 0;
 
         for(uint8_t sample=0; sample<PULSE_FILTER_LENGTH; ++sample) {
             if (pulseFIFO[sample] > PULSE_THRESH_LOW && pulseFIFO[sample] < PULSE_THRESH_HIGH) {
@@ -237,8 +252,8 @@ uint8_t pulse_filter(int16_t pulse) {
         pulseFIFO.push(pulse);
     }
 
-    uint32_t descaled_bpm = DESCALE(bpm_till_now);
-    if(descaled_bpm > uint32_t(BPM_THRESH_HIGH) || descaled_bpm < uint32_t(BPM_THRESH_LOW)) {
+    uint64_t descaled_bpm = DESCALE(bpm_till_now);
+    if(descaled_bpm > uint64_t(BPM_THRESH_HIGH) || descaled_bpm < uint64_t(BPM_THRESH_LOW)) {
         return 1;
     } else {
         return 0;
@@ -249,7 +264,7 @@ uint8_t temp_filter(int16_t temp) {
     temp_till_now = (temp_till_now * temp_counter + SCALE(temp)) / (temp_counter + 1);
     temp_counter += 1;
 
-    int32_t descaled_temp = DESCALE(temp_till_now);
+    int64_t descaled_temp = DESCALE(temp_till_now);
     if(descaled_temp > TEMP_THRESH_HIGH || descaled_temp < TEMP_THRESH_LOW) {
         return 1;
     } else {
@@ -285,17 +300,15 @@ void loop() {
     int16_t pulse = analogRead(2);
 
     //printSerial(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], temp, pulse);
-    int16_t ble_packet[5];
-    ble_packet[0] = motion_filter(buf);
-    ble_packet[1] = pulse_filter(pulse);
-    ble_packet[2] = temp_filter(temp);
-    ble_packet[3] = DESCALE(temp_till_now);
-    ble_packet[4] = DESCALE(bpm_till_now);
+    int16_t ble_packet[3];
+    ble_packet[0] = SET_MOTION_FILTER_FLAG(motion_filter(buf)) | SET_PULSE_FILTER_FLAG(pulse_filter(pulse)) | SET_TEMP_FILTER_FLAG(temp_filter(temp)) ;
+    ble_packet[1] = DESCALE(temp_till_now);
+    ble_packet[2] = DESCALE(bpm_till_now);
 
-    ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
-    if(ble_packet[0]) {
+    ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
+    if(ble_packet[0] & MOTION_FILTER_FLAG) {
       for(uint8_t i = 0; i < PACKET_BURST_LENGTH; i++) {
-        ble_send((uint8_t*)ble_packet, 10, BLE_TIMEOUT);
+        ble_send((uint8_t*)ble_packet, 6, BLE_TIMEOUT);
       }
     }
 }
